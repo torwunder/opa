@@ -256,7 +256,9 @@ func (p *Plugin) Loaders() map[string]Loader {
 }
 
 // Trigger triggers a bundle download on all configured bundles.
-func (p *Plugin) Trigger(ctx context.Context) error {
+func (p *Plugin) Trigger(ctx context.Context) Errors {
+	errs := make(Errors)
+
 	p.mtx.Lock()
 	downloaders := map[string]Loader{}
 	for name, dl := range p.downloaders {
@@ -264,9 +266,15 @@ func (p *Plugin) Trigger(ctx context.Context) error {
 	}
 	p.mtx.Unlock()
 
-	for _, d := range downloaders {
-		// plugin callback will log the trigger error and include it in the bundle status
-		_ = d.Trigger(ctx)
+	for name, d := range downloaders {
+		// plugin callback will also log the trigger error and include it in the bundle status
+		err := d.Trigger(ctx)
+		if err != nil && *p.config.Bundles[name].Trigger == plugins.TriggerManual {
+			errs[name] = err
+		}
+	}
+	if len(errs) > 0 {
+		return errs
 	}
 	return nil
 }
