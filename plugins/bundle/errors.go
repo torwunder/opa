@@ -1,23 +1,34 @@
 package bundle
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 )
 
 // Errors represents a map of errors that occurred during a bundle load indexed by bundle name.
-type Errors map[string]error
+type Errors []Error
 
+func (e Errors) Unwrap() []error {
+	output := make([]error, len(e))
+	for i := range e {
+		output[i] = e[i]
+	}
+	return output
+}
 func (e Errors) Error() string {
+	err := errors.Join(e.Unwrap()...)
+	return err.Error()
+}
 
-	if len(e) == 0 {
-		return "no error(s)"
-	}
+type Error struct {
+	name string
+	err  error
+}
 
-	var s []string
-	for name, err := range e {
-		s = append(s, fmt.Sprintf("'%s': %v", name, err.Error()))
-	}
+func (e Error) Error() string {
+	return fmt.Sprintf("'%s': %v", e.name, e.err)
+}
 
-	return fmt.Sprintf("%d error(s) occurred:\n%s", len(e), strings.Join(s, "\n"))
+func (e Error) Unwrap() error {
+	return e.err
 }

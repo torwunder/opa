@@ -6248,21 +6248,20 @@ func TestPluginManualTriggerWithServerError(t *testing.T) {
 	}
 	// manually trigger bundle download
 
-	errs := plugin.Trigger(ctx)
+	err = plugin.Trigger(ctx)
 
-	expected := 500
-
-	// assert error returned for bundle in manual trigger mode
-	var httpErr download.HTTPError
-	errors.As(errs["manual"], &httpErr)
-
-	if httpErr.StatusCode != expected {
-		t.Fatalf("expected error code %v but got %v", expected, httpErr.StatusCode)
-	}
-
-	// assert error is not returned for bundle in periodic trigger mode
-	if errs["periodic"] != nil {
-		t.Fatal("expected no error returned for bundle in periodic trigger mode")
+	var bundleErrors Errors
+	if errors.As(err, &bundleErrors) {
+		if len(bundleErrors) != 1 {
+			t.Fatalf("expected exactly one error, got %d", len(bundleErrors))
+		}
+		for _, e := range bundleErrors {
+			if e.name != "manual" {
+				t.Fatalf("expect error only for bundle with manual trigger mode")
+			}
+		}
+	} else {
+		t.Fatalf("expected type of error to be %s but got %s", reflect.TypeOf(bundleErrors), reflect.TypeOf(err))
 	}
 }
 
