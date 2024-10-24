@@ -6204,6 +6204,67 @@ func TestPluginManualTriggerWithTimeout(t *testing.T) {
 	}
 }
 
+func TestPluginManualTriggerWithServerError(t *testing.T) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	s := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, _ *http.Request) {
+		resp.WriteHeader(500)
+	}))
+
+	// setup plugin pointing at fake server
+	manager := getTestManagerWithOpts([]byte(fmt.Sprintf(`{
+		"services": {
+			"default": {
+				"url": %q
+			}
+		}
+	}`, s.URL)))
+
+	var manual plugins.TriggerMode = "manual"
+	var periodic plugins.TriggerMode = "periodic"
+	var delay int64 = 10
+	polling := download.PollingConfig{MinDelaySeconds: &delay, MaxDelaySeconds: &delay}
+
+	plugin := New(&Config{
+		Bundles: map[string]*Source{
+			"manual": {
+				Service:        "default",
+				SizeLimitBytes: int64(bundle.DefaultSizeLimitBytes),
+				Config:         download.Config{Trigger: &manual},
+			},
+			"periodic": {
+				Service:        "default",
+				SizeLimitBytes: int64(bundle.DefaultSizeLimitBytes),
+				Config:         download.Config{Trigger: &periodic, Polling: polling},
+			},
+		},
+	}, manager)
+
+	err := plugin.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// manually trigger bundle download
+
+	err = plugin.Trigger(ctx)
+
+	var bundleErrors Errors
+	if errors.As(err, &bundleErrors) {
+		if len(bundleErrors) != 1 {
+			t.Fatalf("expected exactly one error, got %d", len(bundleErrors))
+		}
+		for _, e := range bundleErrors {
+			if e.name != "manual" {
+				t.Fatalf("expect error only for bundle with manual trigger mode")
+			}
+		}
+	} else {
+		t.Fatalf("expected type of error to be %s but got %s", reflect.TypeOf(bundleErrors), reflect.TypeOf(err))
+	}
+}
+
 func TestGetNormalizedBundleName(t *testing.T) {
 	cases := []struct {
 		input string
